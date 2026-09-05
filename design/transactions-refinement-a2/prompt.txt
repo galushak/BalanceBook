@@ -1,0 +1,17 @@
+Use case: ui-mockup, precise-object-edit.
+Edit the attached Balancebook Transactions A / Ledger Overview screenshot. It is the user's preferred design. Make ONLY the following changes and preserve everything else: REMOVE the entire transaction Name column, including its header and every value. Do not replace it with Description, Title, Memo, or another equivalent field. Reflow the remaining columns neatly across the exact same table width using the freed space for Account(s), Payee and Category readability. Final headers in order: Date, Type, Account(s), Payee, Category, Amount, Status, then unlabeled row ellipsis actions. Search placeholder becomes exactly "Search payee, category, notes, or amount". Small concept label becomes "TRANSACTIONS / A2 / Ledger Overview". Keep SAMPLE DATA.
+Preserve the exact dark graphite NOC/SOC Operations Grid style, left sidebar, top bar, active Transactions selections, compact search/filters, full-width dense table, all six filter controls, sorting, 12 event rows, row order, dates, statuses, monetary amounts, footer, and dimensions. No new panels, decorative icons, cards, graphs, or layout redesign. No transaction-name field anywhere.
+Rows after removing Name:
+Sep 05, 2026 | Expense | Checking | Walmart | Groceries | -$86.42 | Active
+Sep 05, 2026 | Expense | Everyday Visa | Shell | Transport | -$42.10 | Active
+Sep 04, 2026 | Income | Checking | Employer | Salary | +$2,500.00 | Active
+Sep 04, 2026 | Transfer | Checking → Savings | Checking → Savings | Transfers | $500.00 moved | Active
+Sep 03, 2026 | Loan payment | Checking → Auto Loan | Checking → Auto Loan | Loan Payments | $450.00 paid | Active
+Sep 03, 2026 | Card payment | Checking → Everyday Visa | Checking → Everyday Visa | Card Payments | $150.00 paid | Active
+Sep 02, 2026 | Refund | Checking | Shoe Store | Clothing | +$20.00 | Active
+Sep 02, 2026 | Expense | Everyday Visa | Stream Co | Subscriptions | -$14.99 struck through | VOIDED
+Sep 01, 2026 | Expense | Checking | ISP | Utilities | -$65.00 | Active
+Aug 31, 2026 | Expense | Everyday Visa | Shoe Store | Clothing | -$80.00 | Active
+Aug 30, 2026 | Adjustment | Cash Wallet | Balance Adjustment | Balance Adjustments | -$5.00 | Active
+Aug 30, 2026 | Expense | Checking | Local Cafe | Dining | -$18.50 | Active
+Retain neutral light text for unsigned moved/paid amounts, red for negative ledger amounts and green for positive income/refund. Voided row subdued but readable. All columns separated by comfortable whitespace, no collisions. Footer 1–12 of 12. No data changes. Render as one high-fidelity desktop UI screenshot, not a collage.

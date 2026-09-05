@@ -1,0 +1,15 @@
+name: balancebook-demo
+services:
+  app:
+    build: .
+    ports:
+      - "127.0.0.1:3080:3080"
+    environment:
+      DATA_DIR: /data
+      HOST: 0.0.0.0
+      PORT: 3080
+    volumes:
+      - balancebook-data:/data
+    restart: unless-stopped
+volumes:
+  balancebook-data:

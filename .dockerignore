@@ -1,0 +1,17 @@
+node_modules
+.git
+.cache
+data
+dist
+design
+test-results
+playwright-report
+*.log
+.env
+.env.*
+backups
+*.db
+*.sqlite
+*.sqlite3
+*.pem
+*.key

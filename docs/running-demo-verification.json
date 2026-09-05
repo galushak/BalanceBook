@@ -1,0 +1,18 @@
+{
+  "checkedAt": "2026-09-05T20:07:26.764Z",
+  "health": {
+    "status": "ok",
+    "version": "1.0.0-demo"
+  },
+  "accounts": 8,
+  "transactions": 47,
+  "totals": {
+    "funds": 1245000,
+    "debt": -2485000
+  },
+  "offlineEntryCount": 1,
+  "offlineEntryStatus": "VOIDED",
+  "reconciliationSessions": 1,
+  "attachments": 2,
+  "latestBackup": "balancebook-backup-2026-09-05T20-07-26-753Z-d75d667e.zip"
+}

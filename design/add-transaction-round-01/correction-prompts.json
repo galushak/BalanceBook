@@ -1,0 +1,12 @@
+[
+  {
+    "id": "02",
+    "source": "C:\\Users\\galushak\\.codex\\generated_images\\01a0722b-d26a-71d1-9611-f0cf9a035b8d\\exec-31eddb4b-2926-4b5b-9152-307f858b78f4.png",
+    "prompt": "Use case: ui-mockup, precise-object-edit. Edit ONLY the provided Balancebook Income Add Transaction screenshot to restore two missing REQUIRED editable input fields in the LEFT form. Between the Amount/Date row and Notes, insert labeled Payee autocomplete with value \"Employer\" and labeled Category dropdown with value \"Salary\", as two compact stacked rows. Include small \"Create payee\" and \"Create category\" links adjacent to labels. Reduce the oversized Notes textarea and attachment whitespace to fit without scrolling, keeping Save transaction visible. Remove the invented \"0/300\" notes counter. Preserve Income selected, Account Everyday Checking, Amount $2,500.00, Date Sep 05 2026, optional notes, attachments, exact shell and visual style, and the entire right preview with current +$3,450.00, change +$2,500.00, after save +$5,950.00, payee Employer, category Salary, Income +$2,500.00. No transaction Name/Title/Description field. All other elements unchanged. Single desktop screenshot."
+  },
+  {
+    "id": "05",
+    "source": "C:\\Users\\galushak\\.codex\\generated_images\\01a0722b-d26a-71d1-9611-f0cf9a035b8d\\exec-1346f5c7-720d-46f0-99f6-be2401b18158.png",
+    "prompt": "Use case: ui-mockup, precise-object-edit. Correct ONLY the editable principal field in this Balancebook Loan Payment screenshot. In the Payment breakdown area, the left input incorrectly contains the word \"Principal\" with no amount. Place the label \"Principal\" ABOVE the left input and show \"$ 350.00\" INSIDE it. Keep the adjacent Interest field showing \"$ 100.00\" and helper \"$350.00 + $100.00 = $450.00\". Remove invented \"22/300\" counter from Notes. Preserve everything else pixel faithfully: loan payment layout, Regular Payment selected, all accounts/amounts/dates, optional receipt, note, Save button, dark Operations Grid styling, exact right preview showing Checking +$3,450.00 -$450.00 +$3,000.00 and Auto Loan -$14,500.00 +$350.00 -$14,150.00, total $450, principal $350, interest $100, Spent +$450.00. No transaction name field. Single screenshot."
+  }
+]
