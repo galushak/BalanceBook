@@ -1,9 +1,7 @@
-# Manual imports on main
+# Manual statement imports
 
-The current `main` version uses manual ledger entry and CSV/PDF statement review. Direct bank connections, Plaid API routes, OAuth, and external SDK permissions have been removed. The separate `plaid` branch preserves the experimental integration.
+Use Reconciliation in the navigation to upload a CSV or PDF statement. Merchant suggestions, learned matches, manual transaction matching and balance-adjustment reconciliation remain available.
 
-Existing financial records and saved reconciliation sessions are retained as historical data. Deployment removes the inactive connection configuration and cached credentials from the live database after a backup. The original encryption key is retained with the rollback backups, separately from the active application.
+Open sessions appear in Saved sessions. Completed sessions appear in History, where they can be reopened or deleted without deleting posted ledger transactions.
 
-Use Transactions → Import CSV to upload a statement. Merchant suggestions, learned matches, manual transaction matching and balance-adjustment reconciliation remain available.
-
-Validation: TypeScript check, production build, 38 tests, including authenticated 404 checks for every former connection endpoint and restrictive content-security-policy checks.
+Optional bank pulls use the same reconciliation workflow. See [Plaid reconciliation](plaid-reconciliation.md). The v1.0.0 release remains the manual-only baseline; the separate plaid branch is the older experimental app rework.
