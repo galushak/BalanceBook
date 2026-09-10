@@ -1,4 +1,4 @@
-const VERSION='balancebook-v1-demo-2';
+const VERSION='balancebook-manual-20260910-3';
 self.addEventListener('install',event=>event.waitUntil((async()=>{const cache=await caches.open(VERSION);await cache.addAll(['/','/manifest.webmanifest','/icon.svg']);await self.skipWaiting()})()));
 self.addEventListener('activate',event=>event.waitUntil((async()=>{for(const key of await caches.keys())if(key!==VERSION)await caches.delete(key);try{const sub=await self.registration.pushManager?.getSubscription();await sub?.unsubscribe()}catch{}await self.clients.claim()})()));
 self.addEventListener('fetch',event=>{const req=event.request,url=new URL(req.url);if(url.origin!==location.origin||url.pathname.startsWith('/api/')||req.method!=='GET')return;if(req.mode==='navigate'){event.respondWith(fetch(req).then(async r=>{if(r.ok)(await caches.open(VERSION)).put('/',r.clone());return r}).catch(()=>caches.match('/')));return;}event.respondWith(caches.match(req).then(cached=>cached||fetch(req).then(async r=>{if(r.ok)(await caches.open(VERSION)).put(req,r.clone());return r})));});

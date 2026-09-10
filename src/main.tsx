@@ -1,3 +1,3 @@
 import React from 'react';import {createRoot} from 'react-dom/client';import {App} from './App';import './style.css';import {DialogProvider} from './dialogs';
 createRoot(document.getElementById('root')!).render(<DialogProvider><App/></DialogProvider>);
-if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));
+if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js',{updateViaCache:'none'}).then(reg=>{navigator.serviceWorker.addEventListener('controllerchange',()=>window.dispatchEvent(new Event('app-update')));reg.update().catch(()=>{});window.addEventListener('focus',()=>reg.update().catch(()=>{}))}).catch(()=>{}));
