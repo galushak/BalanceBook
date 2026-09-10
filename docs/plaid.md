@@ -1,0 +1,15 @@
+# Original Plaid V1 (historical)
+
+The `plaid` branch replaces the review-only behavior below with [the Plaid-first rework](plaid-rework.md). Use that document for current import, balance and recurring behavior.
+
+Open Transactions → Import CSV → Bank connections. Configure Plaid with the client ID, Production/Trial secret and Production environment (or Sandbox credentials for testing). Secrets are saved encrypted on the server and never returned by an API or included in the client/offline state. Register `https://balancebook.turneditoffandonagain.com/plaid/oauth` in Plaid's allowed redirect URIs. Bank passwords are entered only through Plaid Link/bank OAuth.
+
+Connect bank, map supported USD depository/credit accounts to distinct existing Balancebook accounts, save the mapping, then Sync transactions. Initial history requests 90 days. Sync retrieves data already available from Plaid; initial data can take several minutes. This version uses manual sync, not webhooks, scheduled polling or the paid Transactions Refresh add-on. Pending transactions are retained privately but never posted. Only reconciliation links can be automatic; ledger transactions and balances are not created or overwritten by sync.
+
+Sync persists the cursor, bank cache, and review changes together in one SQLite transaction after all pages succeed. Pagination mutation errors restart from the original cursor. Stable bank transaction IDs prevent repeat imports. Modified/removed bank entries flag existing review rows; ledger entries remain unchanged. Plaid descriptions and amounts use the existing learned payees and conservative matching rules. Unsupported currencies stop a batch rather than interpreting currency as USD. Disconnect revokes the Plaid Item; existing review/ledger history remains.
+
+`/data/plaid.key` encrypts both credentials and access tokens with AES-256-GCM. Preserve this file separately with restricted permissions when migrating or recovering the server. The regular backup contains the encrypted database, but does not contain this encryption key or expose tokens in export.json. Restoring on a new server requires the matching key. A lost key prevents decrypting connections. No secrets belong in Git or client bundles.
+
+Routes are protected by the app's owner login and origin/request verification. Plaid errors return codes without tokens or raw requests. OAuth resumes from a temporary Link token in sessionStorage; only that short-lived Link token reaches the browser. CSP permits Plaid's official CDN iframe/SDK and API endpoints with per-response nonce support.
+
+Validation includes simulated Plaid exchange/accounts/sync/disconnect, encrypted storage checks, pagination restarts, atomic failure recovery, repeated sync, and bank changes/removals. Live institution authentication must be completed by the owner; simulated tests do not establish bank compatibility or production OAuth approval.

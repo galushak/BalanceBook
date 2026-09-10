@@ -1,4 +1,6 @@
-import type {State,Account,Tx,Mutation,Rule,Entity,Entry} from './types';
+import {splitMatches} from './split-match';
+import {autoMatch} from './auto-match';
+import type {State,Account,Tx,Mutation,Rule,Entity,Entry,Collection} from './types';
 export class DomainError extends Error {constructor(message:string,public status=400,public details:any=null){super(message)}}
 export const assert=(condition:any,message:string)=>{if(!condition)throw new DomainError(message)};
 export const id=():string=>crypto.randomUUID();
@@ -8,9 +10,9 @@ export const validDate=(s:string)=>{if(!/^\d{4}-\d{2}-\d{2}$/.test(s))return fal
 export const dateAdd=(date:string,n:number)=>{const d=new Date(date+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10)};
 export function cents(raw:string):number {const s=String(raw).replace(/[$,\s]/g,'');assert(/^-?\d+(\.\d{0,2})?$/.test(s),'Enter an amount with at most two decimal places.');const neg=s.startsWith('-');const [w,f='']=s.replace('-','').split('.');const n=Number(w)*100+Number(f.padEnd(2,'0'));assert(Number.isSafeInteger(n)&&n<=999999999999,'Amount is too large.');return neg?-n:n}
 export const money=(n:number,signed=false)=>(n<0?'-':signed&&n>0?'+':'')+new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(Math.abs(n)/100);
-export const balance=(s:State,accountId:string,date?:string)=>{const a=s.accounts.find(a=>a.id===accountId);if(!a||date&&date<a.trackingStart)return 0;return a.opening+s.events.filter(e=>e.status==='ACTIVE'&&(!date||e.date<=date)).reduce((sum,e)=>sum+e.entries.filter(l=>l.accountId===accountId).reduce((v,l)=>v+l.amount,0),0)};
+export const balance=(s:State,accountId:string,date?:string)=>{const a=s.accounts.find(a=>a.id===accountId);if(!a||date&&date<a.trackingStart)return 0;if(!date&&a.details?.plaid&&Number.isSafeInteger(a.details.plaid.current))return a.details.plaid.current+s.events.filter(e=>e.status==='ACTIVE'&&!e.bank?.refs?.some(r=>r.accountId===accountId&&!r.pending)).reduce((n,e)=>n+e.entries.filter(v=>v.accountId===accountId).reduce((m,v)=>m+v.amount,0),0);return a.opening+s.events.filter(e=>e.status==='ACTIVE'&&(!date||(a.details?.plaid?e.bank?.refs?.some(r=>r.accountId===accountId&&!r.pending&&r.date<=date):e.date<=date))).reduce((sum,e)=>sum+e.entries.filter(l=>l.accountId===accountId).reduce((v,l)=>v+l.amount,0),0)};
 export const totals=(s:State)=>s.accounts.filter(a=>!a.archived).reduce((t,a)=>{t[debt(a)?'debt':'funds']+=balance(s,a.id);return t},{funds:0,debt:0});
-export function classification(e:Tx){if(e.status==='VOIDED')return {income:0,spent:0};if(e.type==='INCOME'||e.type==='REFUND')return {income:e.amount,spent:0};if(e.type==='EXPENSE'||e.type==='DEBT_PAYMENT'&&e.principal!==undefined)return {income:0,spent:e.amount};if(e.type==='ADJUSTMENT')return {income:e.direction===1?e.amount:0,spent:e.direction===-1?e.amount:0};return {income:0,spent:0}}
+export function classification(e:Tx){if(e.status==='VOIDED'||e.bank?.excludeReports&&!e.bank?.manual)return {income:0,spent:0};if(e.type==='INCOME'||e.type==='REFUND')return {income:e.amount,spent:0};if(e.type==='EXPENSE'||e.type==='DEBT_PAYMENT'&&e.principal!==undefined)return {income:0,spent:e.amount};if(e.type==='ADJUSTMENT')return {income:e.direction===1?e.amount:0,spent:e.direction===-1?e.amount:0};return {income:0,spent:0}}
 export const periodTotals=(events:Tx[],from:string,to:string)=>events.filter(e=>e.date>=from&&e.date<=to).reduce((t,e)=>{const c=classification(e);return {income:t.income+c.income,spent:t.spent+c.spent}},{income:0,spent:0});
 const integer=(v:any,name:string,min=0)=>{assert(Number.isSafeInteger(v)&&v>=min&&v<=999999999999,`${name} must be valid integer cents.`);return v};
 const text=(v:any,n=200)=>String(v??'').trim().slice(0,n);
@@ -19,6 +21,7 @@ export function buildEvent(s:State,input:any,existing?:Tx,allowFuture=false):Tx 
  const a=s.accounts.find(a=>a.id===input.accountId);assert(a,'Choose an account.');assert(!a.archived,'Restore this archived account before changing its ledger.');assert(date>=a.trackingStart,'Date cannot predate account tracking.');
  const amount=integer(input.amount,'Amount',1);const type=input.type;assert(['EXPENSE','INCOME','TRANSFER','DEBT_PAYMENT','ADJUSTMENT','REFUND'].includes(type),'Unknown transaction type.');
  const out:any={...existing,id:existing?.id||input.id||id(),version:(existing?.version||0)+1,createdAt:existing?.createdAt||new Date().toISOString(),updatedAt:new Date().toISOString(),type,date,accountId:a.id,amount,notes:text(input.notes,10000),status:'ACTIVE',entries:[],payee:'',category:''};
+ if(!existing&&!allowFuture&&(a.details?.plaid||s.accounts.find(v=>v.id===input.toAccountId)?.details?.plaid))out.settlement='AWAITING_BANK';
  for(const key of ['principal','interest','subtype','direction','toAccountId','refundOf','payeeId','categoryId'])delete out[key];
  if(input.occurrenceId)out.occurrenceId=input.occurrenceId;
  if(type==='TRANSFER'||type==='DEBT_PAYMENT'){
@@ -36,11 +39,12 @@ export function buildEvent(s:State,input:any,existing?:Tx,allowFuture=false):Tx 
   out.entries=[{accountId:a.id,amount:type==='EXPENSE'?-amount:amount}];
  }
  if(existing){const refunds=s.events.filter(e=>e.refundOf===existing.id&&e.status==='ACTIVE');assert(!refunds.length||type==='EXPENSE'&&amount>=refunds.reduce((v,e)=>v+e.amount,0),'This expense has active refunds exceeding the proposed amount.');assert(!refunds.some(e=>e.date<date),'An expense cannot be moved after its refunds.');}
+ if(existing?.bank?.refs?.length){assert(type===existing.type&&date===existing.date&&amount===existing.amount&&JSON.stringify(out.entries)===JSON.stringify(existing.entries),'Bank amounts, dates and accounts are managed by sync. You can edit the payee, category and notes.');}
  assert(out.entries.every((e:Entry)=>Number.isSafeInteger(e.amount)),'Invalid ledger amount.');return out;
 }
 export function blankState():State{return {schema:1,epoch:id(),accounts:[],events:[],categories:[],payees:[],rules:[],occurrences:[],revisions:[],attachments:[],reconciliations:[],checkpoints:[],settings:{timezone:'America/New_York',timeout:30,autoPost:true,forecastTarget:'month',forecastDate:'',forecastRule:'',backupHour:2,retention:30,demo:false,theme:'system'}}}
 export function applyMutation(s:State,m:Mutation):State {
- assert(m.epoch===s.epoch,'This device has data from before a restore. Export pending changes and refresh before syncing.');const allowed={settings:['update'],events:['create','update','void','restore'],accounts:['create','update'],rules:['create','update'],categories:['create','update','delete'],payees:['create','update','delete'],occurrences:['create','update'],checkpoints:['create'],reconciliations:['create','update']};assert(allowed[m.collection]?.includes(m.action),'Unsupported operation.');const n=structuredClone(s),now=new Date().toISOString();let before:any=null,after:any=null;
+ assert(m.epoch===s.epoch,'This device has data from before a restore. Export pending changes and refresh before syncing.');const allowed={settings:['update'],events:['create','update','void','restore'],accounts:['create','update'],rules:['create','update'],categories:['create','update','delete'],payees:['create','update','delete'],occurrences:['create','update'],checkpoints:['create'],reconciliations:['create','update','replace-adjustment','match-split']};assert(allowed[m.collection]?.includes(m.action),'Unsupported operation.');const n=structuredClone(s),now=new Date().toISOString();let before:any=null,after:any=null;
  if(m.collection==='settings'){if(m.baseVersion!==(s.settings.version||0))throw new DomainError('Settings changed on another device.',409,{server:s.settings,local:m.data,mutation:m});const d=m.data;assert(Number.isInteger(d.timeout)&&d.timeout>=1&&d.timeout<=10080,'Session timeout must be 1–10080 minutes.');try{today(d.timezone)}catch{throw new DomainError('Invalid timezone.')}assert(['month','date','rule'].includes(d.forecastTarget),'Invalid forecast target.');assert(Number.isInteger(d.backupHour)&&d.backupHour>=0&&d.backupHour<24,'Backup hour must be 0–23.');assert(Number.isInteger(d.retention)&&d.retention>=1&&d.retention<=365,'Retention must be 1–365.');assert(['dark','light','system'].includes(d.theme),'Choose a valid theme.');assert(typeof d.autoPost==='boolean','Invalid posting preference.');assert(d.forecastTarget!=='date'||validDate(d.forecastDate),'Choose a forecast date.');before=s.settings;after={...d,demo:s.settings.demo,version:(s.settings.version||0)+1};n.settings=after;}
  else{
   const rows:any[]=n[m.collection];assert(Array.isArray(rows),'Unknown entity.');const index=rows.findIndex(e=>e.id===m.entityId);before=index>=0?rows[index]:null;
@@ -49,6 +53,8 @@ export function applyMutation(s:State,m:Mutation):State {
   if(before&&m.action==='create')throw new DomainError('This record already exists.',409,{server:before,local:m.data,mutation:m});
   const base={id:m.entityId,version:(before?.version||0)+1,createdAt:before?.createdAt||now,updatedAt:now};
   if(m.collection==='events'){
+   assert(!before?.bank?.refs?.length||m.action==='update','Bank transactions are managed by sync and cannot be voided manually.');
+   assert(!before?.imported?.readOnly,'This imported historical reference is read-only.');
    if(m.action==='void'){assert(!n.events.some(e=>e.refundOf===before.id&&e.status==='ACTIVE'),'Void linked refunds before voiding the original expense.');assert(before.entries.every(e=>!n.accounts.find(a=>a.id===e.accountId)?.archived),'Restore affected accounts before voiding activity.');after={...before,...base,status:'VOIDED'};}
    else {assert(m.action==='restore'||!before||before.status!=='VOIDED','Restore this voided transaction before editing it.');if(m.action==='restore'){assert(!before.payeeId||n.payees.find(p=>p.id===before.payeeId)?.active,'Restore or reassign the hidden payee first.');assert(!before.categoryId||n.categories.find(c=>c.id===before.categoryId)?.active,'Restore the hidden category first.');}after=buildEvent(n,{...(m.action==='restore'?before:m.data),id:m.entityId},before);}
    if(after.occurrenceId){assert(!n.events.some(e=>e.id!==after.id&&e.occurrenceId===after.occurrenceId),'This scheduled occurrence has already posted.');}
@@ -57,7 +63,7 @@ export function applyMutation(s:State,m:Mutation):State {
    const d={...before,...m.data};assert(['CHECKING','SAVINGS','WALLET','CREDIT_CARD','LOAN'].includes(d.type),'Choose an account type.');assert(text(d.name),'Account name is required.');assert(!n.accounts.some(a=>a.id!==m.entityId&&!a.archived&&!d.archived&&a.name.toLowerCase()===text(d.name).toLowerCase()),'An active account already has this name.');
    integer(Math.abs(d.opening),'Opening balance');assert(!before?.everUsed||d.opening===before.opening,'Opening balance is locked after the first ledger activity.');assert(!before||d.type===before.type,'Account type cannot be changed after creation.');
    if(d.archived)assert(!n.rules.some(r=>r.status==='ACTIVE'&&(r.template.accountId===m.entityId||r.template.toAccountId===m.entityId)),'Pause, end, or reassign active schedules before archiving.');
-   after={...d,...base,name:text(d.name),institution:text(d.institution),trackingStart:before?.trackingStart||today(n.settings.timezone),everUsed:before?.everUsed||false,details:d.details||{},order:d.order??n.accounts.length,archived:!!d.archived};
+   after={...d,...base,name:text(d.name),institution:text(d.institution),trackingStart:before?.trackingStart||today(n.settings.timezone),everUsed:before?.everUsed||false,details:{...d.details,...(before?.details?.plaid?{plaid:before.details.plaid}:{})},order:d.order??n.accounts.length,archived:!!d.archived};
   }else if(m.collection==='categories'||m.collection==='payees'){
    if(m.action==='delete'){const key=m.collection==='categories'?'categoryId':'payeeId';assert(!n.events.some(e=>e[key]===m.entityId)&&!n.rules.some(r=>r.template[key]===m.entityId),'Used values can be hidden, not deleted.');rows.splice(index,1);}
    else {const d={...before,...m.data};assert(text(d.name),'Name is required.');assert(!rows.some(l=>l.id!==m.entityId&&l.active&&d.active&&l.name.toLowerCase()===text(d.name).toLowerCase()),'This name already exists.');after={...base,name:text(d.name),active:d.active!==false};}
@@ -69,7 +75,14 @@ export function applyMutation(s:State,m:Mutation):State {
    delete after.splitFrom;
   }else if(m.collection==='occurrences'){const rule=n.rules.find(r=>r.id===m.data.ruleId);assert(rule&&Number.isInteger(m.data.sequence)&&m.data.sequence>=0&&m.entityId===rule.id+':'+m.data.sequence&&m.data.due===occurrenceDate(rule,m.data.sequence),'Invalid scheduled occurrence.');if(m.data.override?.amount!==undefined)integer(m.data.override.amount,'Occurrence amount',1);assert(['SKIPPED','MUTED','WAITING'].includes(m.data.status),'Invalid occurrence action.');assert(!n.events.some(e=>e.occurrenceId===m.entityId),'Posted occurrences cannot be skipped.');after={...before,...m.data,...base};}
   else if(m.collection==='checkpoints'){const a=n.accounts.find(a=>a.id===m.data.accountId);assert(a&&validDate(m.data.date),'Choose an account and date.');integer(Math.abs(m.data.external),'External balance');after={...m.data,...base,ledger:balance(n,a.id,m.data.date)};}
-  else if(m.collection==='reconciliations'){assert(before?.status!=='COMPLETE','Completed reconciliations are read-only.');after={...before,...m.data,...base};}
+  else if(m.collection==='reconciliations'&&m.action==='match-split'){
+   assert(before.status==='OPEN','This review is closed.');const row=before.items.find(i=>i.id===m.data.rowId);assert(row,'Bank row not found.');
+   const pairs=splitMatches(n,before,row);assert(pairs.length===1,'The split is no longer a unique match. Refresh and review again.');const pair=pairs[0];
+   assert(pair.principal.id===m.data.principalId&&pair.interest.id===m.data.interestId,'The split changed. Refresh and review again.');
+   after={...before,...base,items:before.items.map(i=>i.id===row.id?{...i,status:'LINKED',linkedTransactionId:pair.principal.id,linkedTransactionIds:[pair.principal.id,pair.interest.id],match:'Matched principal and interest'}:i)};
+  }
+  else if(m.collection==='reconciliations'&&m.action==='replace-adjustment'){return replaceAdjustment(s,m);}
+  else if(m.collection==='reconciliations'){assert(before?.status!=='COMPLETE','Completed reconciliations are read-only.');after=autoMatch(n,{...before,...m.data,...base});}
   if(after){if(index>=0)rows[index]=after;else rows.push(after);}
  }
  n.revisions.push({id:id(),entityId:m.entityId,entityType:m.collection,action:m.resolution?'resolve-conflict':m.action,before,after,at:now,actor:m.deviceId||'owner'});return n;
@@ -77,7 +90,34 @@ export function applyMutation(s:State,m:Mutation):State {
 export function occurrenceDate(r:Rule,i:number){const d=new Date(r.start+'T12:00:00Z'),day=d.getUTCDate();if(r.unit==='days'||r.unit==='weeks')return dateAdd(r.start,i*r.interval*(r.unit==='weeks'?7:1));const months=i*r.interval*(r.unit==='years'?12:1);d.setUTCDate(1);d.setUTCMonth(d.getUTCMonth()+months);const last=new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth()+1,0)).getUTCDate();d.setUTCDate(Math.min(day,last));return d.toISOString().slice(0,10)}
 export function occurrences(s:State,through=dateAdd(today(s.settings.timezone),365)) {const list:any[]=[];for(const r of s.rules)for(let i=0;i<Math.min(r.count||10000,10000);i++){const due=occurrenceDate(r,i);if(due>through||r.end&&due>r.end)break;const oid=`${r.id}:${i}`;const stored=s.occurrences.find(o=>o.id===oid);const posted=s.events.find(e=>e.occurrenceId===oid);if(r.status!=='ACTIVE'&&!posted&&stored?.status!=='SKIPPED')continue;list.push({id:oid,ruleId:r.id,rule:r,due,sequence:i,status:posted?'POSTED':stored?.status|| (due<today(s.settings.timezone)?'OVERDUE':due===today(s.settings.timezone)?'DUE':'UPCOMING'),transactionId:posted?.id,template:{...r.template,...stored?.override},version:stored?.version||0});}return list.sort((a,b)=>a.due.localeCompare(b.due)||a.ruleId.localeCompare(b.ruleId)||a.sequence-b.sequence)}
 export function targetDate(s:State){const t=today(s.settings.timezone);if(s.settings.forecastTarget==='date'&&s.settings.forecastDate>=t)return s.settings.forecastDate;if(s.settings.forecastTarget==='rule'){const o=occurrences(s).find(o=>o.ruleId===s.settings.forecastRule&&!['POSTED','SKIPPED'].includes(o.status));if(o)return o.due;}const d=new Date(t+'T12:00:00Z');d.setUTCMonth(d.getUTCMonth()+1,0);return d.toISOString().slice(0,10)}
-export function forecast(s:State,to=targetDate(s),accountId?:string){let value=accountId?balance(s,accountId):totals(s).funds;const rows:any[]=[{id:'today',due:today(s.settings.timezone),label:'Current balance',change:0,balance:value}];let incomplete=false;const targetRule=s.settings.forecastTarget==='rule'&&to===targetDate(s)?s.settings.forecastRule:null;
+export function upcomingPayments(s:State,to=targetDate(s)){const rows=occurrences(s,to).filter(o=>!['POSTED','SKIPPED'].includes(o.status)&&['EXPENSE','DEBT_PAYMENT'].includes(o.template.type));return {rows,amount:rows.reduce((sum,o)=>sum+(Number.isSafeInteger(o.template.amount)?o.template.amount:0),0),incomplete:rows.some(o=>!Number.isSafeInteger(o.template.amount)||o.template.amount<=0)}}
+export function forecast(s:State,to=targetDate(s),accountId?:string){let value=accountId?balance(s,accountId):totals(s).funds;const rows:any[]=[{id:'today',due:today(s.settings.timezone),label:'Current balance',change:0,balance:value}];let incomplete=false;
  for(const o of occurrences(s,to)){if(['POSTED','SKIPPED'].includes(o.status))continue;const a=s.accounts.find(a=>a.id===o.template.accountId),b=s.accounts.find(a=>a.id===o.template.toAccountId);if(accountId&&a?.id!==accountId&&b?.id!==accountId)continue;const unknown=o.rule.mode==='VARIABLE'&&!o.template.amount;let change=0;if(unknown)incomplete=true;else {const t=o.template;let entries:Entry[]=[];if(t.type==='TRANSFER')entries=[{accountId:a.id,amount:-t.amount},{accountId:b.id,amount:t.amount}];else if(t.type==='DEBT_PAYMENT'){if(b?.type==='LOAN'&&!Number.isSafeInteger(t.principal)){incomplete=true;}entries=[{accountId:a.id,amount:-t.amount},{accountId:b.id,amount:b.type==='LOAN'?t.principal||0:t.amount}];}else entries=[{accountId:a.id,amount:t.type==='INCOME'?t.amount:-t.amount}];change=entries.filter(e=>accountId?e.accountId===accountId:!debt(s.accounts.find(a=>a.id===e.accountId))).reduce((v,e)=>v+e.amount,0);value+=change;}
- rows.push({...o,label:o.rule.label,change:unknown?null:change,balance:value,incomplete,overdue:o.due<today(s.settings.timezone)});if(targetRule&&o.ruleId===targetRule)break;
+ rows.push({...o,label:o.rule.label,change:unknown?null:change,balance:value,incomplete,overdue:o.due<today(s.settings.timezone)});
  }return {rows,value,incomplete};}
+
+function replaceAdjustment(s:State,m:Mutation):State {
+ const session=s.reconciliations.find(r=>r.id===m.entityId);
+ assert(session?.status==='OPEN','This review session is not open.');
+ const row=session.items.find(i=>i.id===m.data.rowId);
+ assert(row&&row.status==='UNMATCHED'&&Number.isSafeInteger(row.amount)&&row.amount<0,'Choose an unresolved expense row.');
+ const adjustment=s.events.find(e=>e.id===m.data.adjustmentId);
+ assert(adjustment&&adjustment.status==='ACTIVE'&&!adjustment.imported?.readOnly,'Adjustment is unavailable.');
+ if(adjustment.version!==m.data.adjustmentVersion)throw new DomainError('The adjustment changed. Review its new amount before continuing.',409,{server:session,local:m.data,mutation:m});
+ assert((adjustment.type==='ADJUSTMENT'&&adjustment.direction===-1||adjustment.type==='EXPENSE'&&adjustment.payee==='Balance Adjustment')&&adjustment.entries.length===1&&adjustment.entries[0].accountId===session.accountId&&adjustment.entries[0].amount===-adjustment.amount,'Choose a debit adjustment on this account.');
+ assert(!adjustment.occurrenceId&&!adjustment.refundOf&&!s.events.some(e=>e.status==='ACTIVE'&&e.refundOf===adjustment.id),'Linked schedules and refunds cannot be replaced this way.');
+ assert(row.date<=adjustment.date,'Purchase date must not follow the adjustment.');
+ assert(-row.amount<=adjustment.amount,'Purchase exceeds the remaining adjustment.');
+ assert(!row.sourceId||!s.reconciliations.some(r=>r.accountId===session.accountId&&r.items.some(i=>i.sourceId===row.sourceId&&i.status==='LINKED'&&s.events.some(e=>e.id===i.linkedTransactionId&&e.status==='ACTIVE'))),'This bank transaction is already linked.');
+ const beforeBalance=balance(s,session.accountId);let n=s;
+ const mutate=(collection:Collection,action:string,data:any,entityId:string,baseVersion?:number)=>{n=applyMutation(n,{...m,id:m.id+':'+entityId,collection,action,data,entityId,baseVersion});};
+ const label=(collection:'payees'|'categories',name:any)=>{const clean=String(name||'').trim();assert(clean.length>0&&clean.length<=200,'Enter a payee and category (up to 200 characters).');const old=n[collection].find(p=>p.active&&p.name.toLowerCase()===clean.toLowerCase());if(old)return old.id;const key=m.id+':'+collection;mutate(collection,'create',{name:clean,active:true},key);return key;};
+ const payeeId=label('payees',m.data.payee),categoryId=label('categories',m.data.category),eventId=m.id+':expense';
+ mutate('events','create',{type:'EXPENSE',accountId:session.accountId,amount:-row.amount,date:row.date,payeeId,categoryId,notes:row.description+'\nReplaces part of adjustment '+adjustment.id},eventId);
+ const remaining=adjustment.amount+row.amount;
+ mutate('events',remaining?'update':'void',{...adjustment,amount:remaining},adjustment.id,adjustment.version);
+ const current=n.reconciliations.find(r=>r.id===session.id);
+ mutate('reconciliations','update',{...current,items:current.items.map(i=>i.id===row.id?{...i,status:'LINKED',linkedTransactionId:eventId,replacedAdjustmentId:adjustment.id}:i)},session.id,current.version);
+ assert(balance(n,session.accountId)===beforeBalance,'Replacement must preserve the account balance.');
+ return n;
+}

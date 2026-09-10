@@ -107,3 +107,11 @@ The owner stated: “I think you know the format I want. I’ll trust your judge
 - Replaced every native select with a shared styled listbox. Payee/category datalists now use searchable in-app suggestions and accept new typed values.
 - Controls support arrow keys, Enter, Escape, type-ahead selection, outside dismissal, disabled states, and field labels. Escape closes the menu before its parent modal.
 - Data-entry inputs and forms request autocomplete off. Login retains standard username/password semantics for credential managers.
+
+## Dashboard forecast and upcoming payments
+
+- The owner prefers the next paycheck as the active forecast target. A Change link beside the target opens forecast preferences.
+- Upcoming Payments replaces the Total Debt headline card. It totals unpaid scheduled expenses and debt payments through the forecast date, including overdue and muted reminders, excluding posted/skipped items and transfers between funds accounts.
+- View payments opens an in-app breakdown. Unknown variable amounts are explicitly flagged. Card charges are listed but do not reduce cash balances until payment.
+- Forecasts include all activity on the target date, avoiding arbitrary exclusions from same-day rule ordering.
+- Verified with the domain regression suite (23 passing tests) and desktop/phone browser checks. Real data remains in ignored local storage.
