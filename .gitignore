@@ -16,3 +16,4 @@ test-results/
 playwright-report/
 *.log
 .cache/
+.codex-remote-attachments/
