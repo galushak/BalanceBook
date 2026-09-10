@@ -1,0 +1,4 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {blankState,applyMutation} from '../shared/domain';
+test('deleting open or closed reconciliation preserves ledger and audits removal',()=>{for(const status of ['OPEN','COMPLETE']){const s:any=blankState();s.accounts=[{id:'a',opening:123}];s.events=[{id:'posted',amount:456}];s.reconciliations=[{id:'r',version:1,status,items:[{linkedTransactionId:'posted'}]}];const m:any={id:'delete-review',epoch:s.epoch,collection:'reconciliations',action:'delete',entityId:'r',baseVersion:1,deviceId:'test',data:{}};const n=applyMutation(s,m);assert.equal(n.reconciliations.length,0);assert.deepEqual(n.events,s.events);assert.deepEqual(n.accounts,s.accounts);assert.equal(n.revisions.at(-1).before.id,'r');assert.throws(()=>applyMutation(s,{...m,baseVersion:0}));}});

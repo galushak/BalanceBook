@@ -10,7 +10,7 @@ import {accountTypes,eventTypes,type Tx,type Account} from '../shared/types';
 import {TransactionForm,AccountForm,RuleForm} from './forms';
 import {AuditHistory} from './history';
 import {Scheduled,Reports,SettingsScreen,ReconcileScreen,ConflictDialog} from './screens';
-const nav=[['dashboard','Dashboard',LayoutDashboard],['transactions','Transactions',List],['scheduled','Scheduled',CalendarDays],['reports','Reports',BarChart3],['reconcile','Reconciliation',Check]] as const;
+const nav=[['dashboard','Dashboard',LayoutDashboard],['transactions','Transactions',List],['scheduled','Scheduled',CalendarDays],['reconcile','Reconciliation',Check],['reports','Reports',BarChart3]] as const;
 export function App(){const l=useLedger(),[page,setPage]=useState('dashboard'),[menu,setMenu]=useState(false),[edit,setEdit]=useState<any>(null),[detail,setDetail]=useState<Tx|null>(null),[accountEdit,setAccountEdit]=useState<any>(null),[account,setAccount]=useState<string|null>(null),[ruleEdit,setRuleEdit]=useState<any>(null);
  useEffect(()=>{if(l.locked){setPage('dashboard');setEdit(null);setDetail(null);setAccount(null);setAccountEdit(null);setRuleEdit(null);setMenu(false)}},[l.locked]);
  useEffect(()=>{if(!l.state)return;const theme=l.state.settings.theme;document.documentElement.dataset.theme=theme==='system'?(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'):theme;const m=matchMedia('(prefers-color-scheme: dark)');const change=()=>{if(theme==='system')document.documentElement.dataset.theme=m.matches?'dark':'light'};m.addEventListener('change',change);return()=>m.removeEventListener('change',change)},[l.state?.settings.theme]);
