@@ -34,9 +34,12 @@ export function publishPlaid(s:any,item:any,accountId?:string){
   for(const [tid,record] of Object.entries(item.transactions) as [string,any][]){
    const t=record.t;if(t.account_id!==remote||t.pending)continue;
    assert(record.removed||t.iso_currency_code==='USD','A bank transaction has an unsupported currency. No updates were saved.');
-   const fingerprint=JSON.stringify(record);if(item.published[tid]===fingerprint)continue;
+   const fingerprint=JSON.stringify(record);
    const sourceId='plaid:'+item.itemId+':'+tid;
    const previous=state.reconciliations.filter(r=>r.accountId===local).flatMap(r=>r.items).find(r=>r.sourceId===sourceId);
+   if(previous&&item.published[tid]===fingerprint)continue;
+   const deleted=!previous&&[...state.revisions].reverse().filter(r=>r.entityType==='reconciliations'&&r.action==='delete'&&r.before?.accountId===local).flatMap(r=>r.before.items||[]).find(r=>r.sourceId===sourceId);
+   if(deleted&&item.published[tid]===fingerprint&&!record.removed){const links=deleted.linkedTransactionIds||[deleted.linkedTransactionId];const valid=deleted.status!=='LINKED'||links.every(id=>state.events.some(e=>e.id===id&&e.status==='ACTIVE'));rows.push({...deleted,id:id(),...(valid?{}:{status:'UNMATCHED',linkedTransactionId:undefined,linkedTransactionIds:undefined,autoMatched:false})});continue;}
    const amount=-cents(String(t.amount??0));
    if(!amount&&!record.removed)continue;
    const warning=previous&&(record.removed?'Bank removed this transaction. Review the existing ledger entry; it was not changed.':'Bank updated this transaction. Review the existing ledger entry; it was not changed.');
