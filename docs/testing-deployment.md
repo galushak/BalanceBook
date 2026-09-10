@@ -1,6 +1,6 @@
 # Testing Docker deployment
 
-Current update (2026-09-10): the existing Compose app now runs `balancebook-plaid:20260910-r3`. See [Plaid rework](plaid-rework.md) for the pre-change backup and rollback details. HTTPS login and desktop/mobile runtime checks passed. The original deployment notes below are retained as history.
+Current update (2026-09-10): the existing Compose app now runs `balancebook-plaid:20260910-r4`. See [Plaid rework](plaid-rework.md) for the pre-change backup and rollback details. HTTPS login and desktop/mobile runtime checks passed. The original deployment notes below are retained as history.
 
 Deployed 2026-09-09 to `192.168.0.43` in `/opt/balancebook`.
 

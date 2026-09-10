@@ -47,6 +47,7 @@ export function importTransactions(input:any,item:any){
   const bankRef={id:key,accountId:account,pending:!!t.pending,date:t.date,amount:signed,description:t.name,transactionId:t.transaction_id};
   if(e){
    const before=e;const oldRef=refs(e).find(r=>r.id===key||r.id===prior);
+   if(e.bank&&!e.bank.manual&&possible.length)e={...e,bank:{...e.bank,candidates:possible.map(v=>v.id),attention:'Possible manual entry — match it or keep both.'}};
    const changed=oldRef&&oldRef.amount!==signed;
    // A bank correction may not silently destroy a user-entered loan split.
    if(changed&&e.entries.length>1){e={...e,bank:{...e.bank,attention:'Bank amount changed. Review the payment split.',refs:refs(e).filter(r=>r.id!==key&&r.id!==prior).concat(bankRef)}};}
@@ -99,7 +100,7 @@ export function fulfillStreams(s:any,item:any){
    if(choices.length===1){
     const o=choices[0];let event=e;
     if(!e.bank.manual&&['TRANSFER','DEBT_PAYMENT'].includes(o.template.type)){
-     try{const built=buildEvent(s,{...o.template,date:e.date,amount:e.amount},undefined,true);event={...e,...built,id:e.id,createdAt:e.createdAt,bank:{...e.bank,manual:true,excludeReports:false},settlement:e.settlement};}
+     try{const built=buildEvent(s,{...o.template,date:e.date,amount:e.amount},undefined,true);event={...e,...built,id:e.id,createdAt:e.createdAt,bank:{...e.bank,manual:true,excludeReports:false,attention:undefined},settlement:e.settlement};}
      catch{put(s,'events',{...e,bank:{...e.bank,attention:'Payment arrived but the scheduled split needs updating. Edit the rule, then sync again.'}});continue;}
     }
     put(s,'events',{...event,occurrenceId:o.id});
@@ -122,4 +123,13 @@ export function linkStream(input:any,item:any,streamId:string,ruleId?:string){
  let rule=ruleId&&s.rules.find(r=>r.id===ruleId);if(ruleId)assert(rule&&rule.template.accountId===accountId&&!rule.plaid,'Choose an unlinked recurring rule for this account.');
  if(!rule){const frequency:any={WEEKLY:['weeks',1],BIWEEKLY:['weeks',2],MONTHLY:['months',1],ANNUALLY:['years',1]};assert(frequency[stream.frequency],'Create a recurring rule with your preferred dates, then link this stream to it.');assert(stream.predicted_next_date,'Plaid has not predicted the next date. Create a rule and link it instead.');const signed=-cents(String(stream.last_amount?.amount??stream.average_amount?.amount));assert(signed,'This stream has no usable amount.');const p=label(s,'payees',stream.merchant_name||stream.description),c=label(s,'categories',signed<0?'Uncategorized':'Income');rule={id:id(),label:p.name,start:stream.predicted_next_date,unit:frequency[stream.frequency][0],interval:frequency[stream.frequency][1],mode:'FIXED',status:'ACTIVE',notifyDays:3,autoSplit:false,template:{type:signed<0?'EXPENSE':'INCOME',accountId,amount:Math.abs(signed),payeeId:p.id,categoryId:c.id,payee:p.name,category:c.name,notes:''}};}
  put(s,'rules',{...rule,plaid:{itemId:item.itemId,streamId}});fulfillStreams(s,item);return s;
+}
+
+export function repairPaymentSplit(input:any,eventId:string,principal:number,interest:number){
+ const s=structuredClone(input),e=s.events.find(e=>e.id===eventId&&e.status==='ACTIVE');assert(e?.type==='DEBT_PAYMENT'&&e.principal!==undefined&&e.bank?.attention,'This payment does not need a split correction.');
+ const source=refs(e).find(r=>r.accountId===e.accountId);assert(source&&source.amount<0,'The bank payment is unavailable. Sync first.');const total=-source.amount;
+ assert(Number.isSafeInteger(principal)&&principal>=0&&Number.isSafeInteger(interest)&&interest>=0&&principal+interest===total,'Principal plus interest must equal the bank payment.');
+ assert(refs(e).every(r=>r.accountId===e.accountId||r.amount===principal),'Principal must agree with the connected loan account.');
+ put(s,'events',{...e,amount:total,principal,interest,entries:[{accountId:e.accountId,amount:-total},{accountId:e.toAccountId,amount:principal}],bank:{...e.bank,attention:undefined}});
+ for(const a of s.accounts.filter(a=>a.details?.plaid&&[e.accountId,e.toAccountId].includes(a.id))){const net=s.events.filter(v=>v.status==='ACTIVE'&&refs(v).some(r=>r.accountId===a.id&&!r.pending)).reduce((n,v)=>n+amount(v,a.id),0);put(s,'accounts',{...a,opening:a.details.plaid.current-net});}return s;
 }

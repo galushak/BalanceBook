@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {blankState,balance,buildEvent,classification,occurrences,applyMutation} from '../shared/domain';
-import {importAccounts,importTransactions,resolveBankMatch,linkStream} from '../server/plaid-first';
+import {importAccounts,importTransactions,resolveBankMatch,linkStream,repairPaymentSplit} from '../server/plaid-first';
 
 const remote=(current=100)=>({account_id:'remote',name:'Bank checking',type:'depository',subtype:'checking',balances:{current,available:current-10,iso_currency_code:'USD'}});
 const bankTx=(overrides:any={})=>({transaction_id:'p',account_id:'remote',amount:10,date:'2026-09-01',name:'Amazon',merchant_name:'Amazon',pending:true,iso_currency_code:'USD',...overrides});
@@ -39,4 +39,11 @@ test('opposite bank transfer entries merge despite a wrong bank category, repeat
  item.transactions.out={t:bankTx({transaction_id:'out',pending:false,name:'INTERNET TRANSFER TO SAVINGS',merchant_name:null,personal_finance_category:{primary:'LOAN_PAYMENTS'}})};
  item.transactions.in={t:bankTx({transaction_id:'in',pending:false,account_id:'savings',amount:-10,name:'INTERNET TRANSFER FROM CHECKING',merchant_name:null,personal_finance_category:{primary:'TRANSFER_IN'}})};
  s=importTransactions(s,item).state;assert.equal(s.events.filter(e=>e.status==='ACTIVE').length,1);const e=s.events.find(e=>e.status==='ACTIVE');assert.equal(e.type,'TRANSFER');assert.equal(e.bank.refs.length,2);assert.equal(balance(s,a),10000);assert.equal(balance(s,b),20000);assert.deepEqual(classification(e),{income:0,spent:0});assert.equal(importTransactions(s,item).count,0);
+});
+test('a manual purchase entered after import is offered for matching',()=>{
+ let {s,item,a}=fixture();item.transactions.p={t:bankTx({pending:false})};s=importTransactions(s,item).state;const e=manual(s,a);s=importTransactions(s,item).state;const bank=s.events.find(v=>v.id!==e.id);assert.deepEqual(bank.bank.candidates,[e.id]);s=resolveBankMatch(s,bank.id,e.id);assert.equal(s.events.filter(e=>e.status==='ACTIVE').length,1);assert.equal(importTransactions(s,item).count,0);
+});
+test('a changed bank loan amount has a validated split repair and retains its occurrence',()=>{
+ let {s,item,a}=fixture();s.accounts.push({id:'loan',name:'Loan',type:'LOAN',opening:-50000,trackingStart:'2026-01-01',details:{}});const e=buildEvent(s,{type:'DEBT_PAYMENT',date:'2026-09-01',accountId:a,toAccountId:'loan',amount:1000,principal:800,interest:200,occurrenceId:'rule:0'});s.events.push(e);item.transactions.p={t:bankTx({pending:false})};s=importTransactions(s,item).state;const bank=s.events.find(v=>v.id!==e.id);s=resolveBankMatch(s,bank.id,e.id);item.transactions.p.t.amount=11;s=importTransactions(s,item).state;
+ assert.match(s.events.find(v=>v.id===e.id).bank.attention,/split/);assert.throws(()=>repairPaymentSplit(s,e.id,800,200),/must equal/);s=repairPaymentSplit(s,e.id,850,250);assert.equal(s.events.find(v=>v.id===e.id).amount,1100);assert.equal(s.events.find(v=>v.id===e.id).occurrenceId,'rule:0');assert.equal(s.events.find(v=>v.id===e.id).bank.attention,undefined);assert.equal(importTransactions(s,item).count,0);
 });

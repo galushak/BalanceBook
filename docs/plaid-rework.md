@@ -26,4 +26,4 @@ Cursor updates, encrypted connection data and ledger changes commit together. Cr
 
 Before deployment, the existing server data was backed up as `balancebook-backup-2026-09-10T18-16-40-502Z-36dceb59.zip`. The prior image is `balancebook-fresh:20260910`; the Compose rollback copy is `compose.pre-plaid-rework-20260910.yaml`. Roll back both data and application together if reverting settlement semantics.
 
-Validation: TypeScript and production Docker build; 47 automated tests including pending replacement, repeated sync, removed authorizations, uncertain matches, bank-owned fields, recurring loan splits, transfer reporting, existing CSV/domain/API regressions.
+Validation: TypeScript and production Docker build; 49 automated tests including pending replacement, repeated sync, removed authorizations, uncertain matches, bank-owned fields, recurring loan splits, transfer reporting, existing CSV/domain/API regressions.

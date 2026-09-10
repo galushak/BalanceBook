@@ -4,7 +4,7 @@ import {join} from 'node:path';
 import {z} from 'zod';
 import {Store} from './store';
 import {assert,DomainError,id,applyMutation,cents} from '../shared/domain';
-import {importAccounts,importTransactions,linkStream,resolveBankMatch} from './plaid-first';
+import {importAccounts,importTransactions,linkStream,resolveBankMatch,repairPaymentSplit} from './plaid-first';
 import {matchItems} from './documents';
 
 export class PlaidVault {
@@ -88,6 +88,7 @@ export function registerPlaid(app:any,store:Store,transport?:any){
  app.post('/api/v1/plaid/sync',locked(async(req:any,check:any)=>syncOne(req.body?.itemId,check)));
  app.get('/api/v1/plaid/recurring',()=>({items:items().map(i=>({itemId:i.itemId,lastSync:i.lastSync,error:i.recurringError,streams:(i.streams||[]).filter(v=>i.mapping[v.account_id]).map(v=>({...v,accountId:i.mapping[v.account_id]}))}))}));
  app.post('/api/v1/plaid/recurring/link',locked(async(req:any)=>{const d=z.object({itemId:z.string(),streamId:z.string(),ruleId:z.string().optional()}).parse(req.body),item=items().find(i=>i.itemId===d.itemId);assert(item,'Connection not found.');store.transaction(()=>store.save(linkStream(store.state(),item,d.streamId,d.ruleId)));return {ok:true};}));
+ app.post('/api/v1/plaid/payment-split',locked(async(req:any)=>{const d=z.object({eventId:z.string(),principal:z.number().int().nonnegative(),interest:z.number().int().nonnegative()}).parse(req.body);store.transaction(()=>store.save(repairPaymentSplit(store.state(),d.eventId,d.principal,d.interest)));return {ok:true};}));
  app.post('/api/v1/plaid/match',locked(async(req:any)=>{const d=z.object({eventId:z.string(),manualId:z.string().optional()}).parse(req.body);store.transaction(()=>store.save(resolveBankMatch(store.state(),d.eventId,d.manualId)));return {ok:true};}));
  // Cached data sync only: no paid on-demand Refresh requests. One connection per tick.
  const timer=setInterval(async()=>{if(busy)return;const item=items().find(i=>!i.lastSync||Date.now()-Date.parse(i.lastSync)>6*60*60*1000);if(!item)return;busy=true;const epoch=store.state().epoch;try{await syncOne(item.itemId,()=>assert(store.state().epoch===epoch,'Ledger changed during sync.'));}catch(e){app.log.warn('Scheduled bank sync failed; use Bank connections to retry.');}finally{busy=false;}},60*60*1000);timer.unref();app.addHook('onClose',()=>clearInterval(timer));
