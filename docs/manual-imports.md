@@ -1,7 +1,5 @@
-# Manual statement imports
+# Manual reconciliation on main
 
-Use Reconciliation in the navigation to upload a CSV or PDF statement. Merchant suggestions, learned matches, manual transaction matching and balance-adjustment reconciliation remain available.
+Open Account > Reconciliation, between Settings & backup and Lock. Select an account and upload a CSV or PDF statement. Open sessions appear in Saved sessions; completed sessions appear in History and can be reopened or deleted.
 
-Open sessions appear in Saved sessions. Completed sessions appear in History, where they can be reopened or deleted without deleting posted ledger transactions.
-
-Optional bank pulls use the same reconciliation workflow. See [Plaid reconciliation](plaid-reconciliation.md). The v1.0.0 release remains the manual-only baseline; the separate plaid branch is the older experimental app rework.
+Main has no Plaid connection UI, API routes, OAuth flow, SDK or external script permissions. Existing historical reviews and financial records remain intact. The plaid branch preserves the version that was live before this removal; archive/plaid-rework-20260911 preserves the older experimental rework.
